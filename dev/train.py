@@ -21,7 +21,7 @@ import torch
 torch.autograd.set_detect_anomaly(True)
 ## END DEBUGGING BLOCK
 ## -------------------------
-
+torch.set_float32_matmul_precision('medium')
 
 
 def train(args):
@@ -55,14 +55,13 @@ def train(args):
         logger=logger,
         log_every_n_steps=50,
         reload_dataloaders_every_n_epochs=True,
-        gpus=gpus,
+        accelerator="gpu",
+        devices=gpus,
     )
 
     # Train
     trainer.fit(model, data_module)
 
-    
-    
 
 if __name__ == '__main__':
 
