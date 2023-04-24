@@ -4,13 +4,10 @@ import sys
 
 sys.path.insert(0, os.path.join(sys.path[0], ".."))
 import subprocess
-import time
-import matplotlib.pyplot as plt
 import numpy as np
 import pretty_midi
 from data.dataset_base import BaseDataset
 
-from pm2s.constants import *
 from pm2s.constants import keyName2Number, tolerance
 from pm2s.features.beat import RNNJointBeatProcessor
 from pm2s.features.hand_part import RNNHandPartProcessor
@@ -29,46 +26,17 @@ def mv2h(midi_pred, midi_gt):
     $ rm midi_gt.conv.txt midi_pred.conv.txt
     """
     try:
-        subprocess.run(
-            [
-                "java",
-                "-cp",
-                MV2H_BIN,
-                "mv2h.tools.Converter",
-                "-i",
-                midi_gt,
-                "-o",
-                midi_gt + ".conv.txt",
-            ]
-        )
-        subprocess.run(
-            [
-                "java",
-                "-cp",
-                MV2H_BIN,
-                "mv2h.tools.Converter",
-                "-i",
-                midi_pred,
-                "-o",
-                midi_pred + ".conv.txt",
-            ]
-        )
-        result = subprocess.check_output(
-            [
-                "java",
-                "-cp",
-                MV2H_BIN,
-                "mv2h.Main",
-                "-g",
-                midi_gt + ".conv.txt",
-                "-t",
-                midi_pred + ".conv.txt",
-            ],
-            universal_newlines=True,
-        )
+        subprocess.run(["java", "-cp", MV2H_BIN, "mv2h.tools.Converter",  "-i", midi_gt, "-o", "gt.txt",])
+        subprocess.run(["java", "-cp", MV2H_BIN, "mv2h.tools.Converter",  "-i", midi_pred, "-o", "pred.txt",])
+        subprocess.run(["java", "-cp", MV2H_BIN, "mv2h.tools.Converter",  "-i", midi_gt, "-o", midi_gt + ".conv.txt",])
+        subprocess.run(["java", "-cp", MV2H_BIN, "mv2h.tools.Converter",  "-i", midi_pred, "-o", midi_pred + ".conv.txt",])
+        result = subprocess.check_output(["java", "-cp", MV2H_BIN, "mv2h.Main", "-g", midi_gt + ".conv.txt", "-t", midi_pred + ".conv.txt"], universal_newlines=True)
     finally:
-        os.remove(midi_gt + ".conv.txt")
-        os.remove(midi_pred + ".conv.txt")
+        try:
+            os.remove(midi_gt + ".conv.txt")
+            os.remove(midi_pred + ".conv.txt")
+        except:
+            pass
     return result
 
 
@@ -103,7 +71,7 @@ def eval(args):
     processor_key_sig._model.to("cuda")
 
 
-    def predict(note_seq: np.ndarray):
+    def predict(note_seq: np.ndarray, midi_path):
         # beats = processor_beat.process(note_seq)
         beats, onset_positions, note_values = processor_quantisation.process(note_seq)
         hand_parts = processor_hand.process(note_seq)
@@ -120,9 +88,9 @@ def eval(args):
             "beats": [0, *beats], # to align with the gt, we have to add one beat at t=0
         }
         # Create PrettyMIDI object using the above data
-        return quantize(note_seq, annotations, "/tmp/test.mid")
+        return quantize(note_seq, annotations, "test.mid", midi_path)
 
-    def quantize(note_seq, annotations, save_path, gt_midi=None):
+    def quantize(note_seq, annotations, save_path, midi_path):
         onset_positions = annotations["onsets_musical"]
         note_values = annotations["note_value"]
         hand_parts = annotations["hands"]
@@ -134,7 +102,7 @@ def eval(args):
         # note values
         # dict_keys(['beats', 'downbeats', 'time_signatures', 'key_signatures', 'onsets_musical', 'note_value', 'hands'])
         # Create PrettyMIDI object using the above data
-        midi = pretty_midi.PrettyMIDI()
+        midi = pretty_midi.PrettyMIDI(resolution=480)
         for ts in time_signatures:
             ts, num, denom = ts
             midi.time_signature_changes.append(
@@ -146,90 +114,47 @@ def eval(args):
             )
         instrument_left = pretty_midi.Instrument(program=0, name="Piano left")
         instrument_right = pretty_midi.Instrument(program=0, name="Piano right")
-        errors = []
+
         for i, (pitch, onset, length, velocity) in enumerate(note_seq):
-            # The quantized onset is placed at start=(beats[i] + ibi * musical onset)
-            # where ibi = beats[i+1] - beats[i]
-            # We select i to minimize abs(start-onset) + abs(end-onset-length).
-            def quantize_note(beats, onset_position, note_value, idx):
-                if gt_midi is None:
-                    if idx + 1 < len(beats):
-                        ibi = beats[idx + 1] - beats[idx]
-                    else:
-                        ibi = beats[idx] - beats[idx - 1]
-                    start = beats[idx] + ibi * (onset_position % 1)
-                else:
-                    if idx + 1 < len(beats):
-                        ibi = gt_midi.time_to_tick(beats[idx + 1]) - gt_midi.time_to_tick(beats[idx])
-                    else:
-                        ibi = gt_midi.time_to_tick(beats[idx]) - gt_midi.time_to_tick(beats[idx - 1])
-                    start = gt_midi.time_to_tick(beats[idx]) + ibi * (onset_position % 1)
-
-                    start = gt_midi.tick_to_time(round(start))
-
-                # Step forward from beat to beat to find the end of the note
-                duration = 0
-                remaining = 1 - (onset_position % 1)
-                while note_value > 1 and idx + 1 < len(beats):
-                    if gt_midi is None:
-                        ibi = beats[idx+1] - beats[idx]
-                    else:
-                        ibi = gt_midi.time_to_tick(beats[idx + 1]) - gt_midi.time_to_tick(beats[idx])
-                    duration += ibi * remaining
-                    note_value -= remaining
-                    remaining = 1
-                    idx += 1
-                if idx + 1 == len(beats): # at end of song, but not done
-                    duration += ibi * note_value
-                else:
-                    if gt_midi is None:
-                        duration += (beats[idx+1] - beats[idx]) * note_value
-                    else:
-                        duration += (gt_midi.time_to_tick(beats[idx+1]) - gt_midi.time_to_tick(beats[idx])) * note_value
-                if gt_midi is None:
-                    end = start + duration
-                else:
-                    end = gt_midi.tick_to_time(round(gt_midi.time_to_tick(start) + duration))
-
-                error = abs(start-onset)# + abs(end-onset-length)
-                return start, end, error
-
-            idxs = np.abs(beats - onset).argsort()[:4]
-            error = float("inf")
-            for idx in idxs:
-                new_start, new_end, new_error = quantize_note(beats, onset_positions[i], note_values[i], idx)
-                if new_error < error:
-                    start, end, error = new_start, new_end, new_error
             # Insert the quantized note into the PrettyMIDI object
             note = pretty_midi.Note(
                 velocity=int(velocity),
                 pitch=int(pitch),
-                start=start,
-                end=end
+                start=onset,
+                end=onset + length
             )
-            errors.append([abs(start-onset), abs(end-onset-length)])
-            # print("-"*20)
-            # print(f"old: {onset:03.4f} {onset+length:03.4f}  |  {onset_positions[i] % 1} + {note_values[i]}")
-            # print(f"new: {note.start:03.4f} {note.end:03.4f}  | {abs(start-onset):03.4f} {abs(end-onset-length):03.4f}")
-
             if hand_parts is None or hand_parts[i] == 0:
                 instrument_left.notes.append(note)
             else:
                 instrument_right.notes.append(note)
-        # Plot the errors
-        errors = np.array(errors)
-        plt.figure(figsize=(12, 4))
-        plt.subplot(1, 2, 1)
-        plt.plot(errors[:, 0])
-        plt.title("Onset error")
-        plt.subplot(1, 2, 2)
-        plt.plot(errors[:, 1])
-        plt.title("Offset error")
-        plt.savefig(f"errors{time.time()}_{gt_midi is not None}.pdf")
-        plt.close()
 
         midi.instruments.append(instrument_left)
         midi.instruments.append(instrument_right)
+
+        # Take care of tempo in piece to quantize correctly.
+
+        # We will go from beat to beat, inserting tempo events such that the bpm is correct
+        for prev_beat, next_beat in zip(beats, beats[1:]):
+            # Calculate the inter-beat interval in seconds
+            ibi = next_beat - prev_beat
+            # Calculate the tempo in beats per minute
+            # bpm = 60 / ibi
+            # Calculate seconds per tick
+            tick_scale = ibi / midi.resolution
+            # Insert the tempo change into the PrettyMIDI object
+            insert_ticks = midi.time_to_tick(prev_beat)
+            # print(midi._PrettyMIDI__tick_to_time)
+            midi._tick_scales.append((insert_ticks, tick_scale))
+            midi._update_tick_to_time(insert_ticks + 1)
+        # for b in beats:
+        #     print(round(1000*b))
+        import matplotlib.pyplot as plt
+        midi_gt = pretty_midi.PrettyMIDI(midi_path)
+        midi.time_signature_changes = midi_gt.time_signature_changes
+        # midi_gt._update_tick_to_time(insert_ticks + 1)
+        # print(midi.time_signature_changes)
+        # print(midi_gt.time_signature_changes)
+        # # Plot the tick scales and tick to time mappings
         midi.write(save_path)
         return save_path
 
@@ -248,20 +173,20 @@ def eval(args):
         # Load inputs
         row = dataset._sample_row(idx)
         note_sequence, annotations = dataset._load_data(row)
-        midi_pred = predict(note_sequence)
-
+        midi_pred = predict(note_sequence, row["midi_perfm"])
         # Load ground truth
-        annotations["onsets_musical"] = np.round(annotations["onsets_musical"] * N_per_beat) / N_per_beat
-        annotations["note_value"] = np.round(annotations["note_value"] * N_per_beat) / N_per_beat
-        annotations["note_value"][annotations["note_value"] == 0] = 1 / N_per_beat
-        midi_gt = quantize(note_sequence, annotations, "/tmp/test_gt.mid", pretty_midi.PrettyMIDI(row["midi_perfm"]))
-        # midi_gt = row["midi_perfm"]
+        # annotations["onsets_musical"] = np.round(annotations["onsets_musical"] * N_per_beat) / N_per_beat
+        # annotations["note_value"] = np.round(annotations["note_value"] * N_per_beat) / N_per_beat
+        # annotations["note_value"][annotations["note_value"] == 0] = 1 / N_per_beat
+        # midi_gt = quantize(note_sequence, annotations, "test_gt.mid", pretty_midi.PrettyMIDI(row["midi_perfm"]))
+        midi_gt = row["midi_perfm"]
         # Evaluate
         result = mv2h(midi_pred, midi_gt)
         for line in result.splitlines():
             key, value = line.split(": ")
             metrics[key].append(float(value))
         print(result)
+        # break
 
     for key, value in metrics.items():
         print(key, np.mean(value), "+/-", np.std(value))
