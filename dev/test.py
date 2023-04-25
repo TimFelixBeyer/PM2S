@@ -8,7 +8,7 @@ import numpy as np
 import pretty_midi
 from data.dataset_base import BaseDataset
 
-from pm2s.constants import keyName2Number, tolerance
+from pm2s.constants import keyName2Number, N_per_beat
 from pm2s.features.beat import RNNJointBeatProcessor
 from pm2s.features.hand_part import RNNHandPartProcessor
 from pm2s.features.key_signature import RNNKeySignatureProcessor
@@ -71,7 +71,7 @@ def eval(args):
     processor_key_sig._model.to("cuda")
 
 
-    def predict(note_seq: np.ndarray, midi_path):
+    def predict(note_seq: np.ndarray):
         # beats = processor_beat.process(note_seq)
         beats, onset_positions, note_values = processor_quantisation.process(note_seq)
         hand_parts = processor_hand.process(note_seq)
@@ -88,9 +88,9 @@ def eval(args):
             "beats": [0, *beats], # to align with the gt, we have to add one beat at t=0
         }
         # Create PrettyMIDI object using the above data
-        return quantize(note_seq, annotations, "test.mid", midi_path)
+        return quantize(note_seq, annotations, "test.mid")
 
-    def quantize(note_seq, annotations, save_path, midi_path):
+    def quantize(note_seq, annotations, save_path):
         onset_positions = annotations["onsets_musical"]
         note_values = annotations["note_value"]
         hand_parts = annotations["hands"]
@@ -131,30 +131,37 @@ def eval(args):
         midi.instruments.append(instrument_left)
         midi.instruments.append(instrument_right)
 
-        # Take care of tempo in piece to quantize correctly.
-
-        # We will go from beat to beat, inserting tempo events such that the bpm is correct
+        # Tempo/Quantization -----------------------------------------------------
+        # Next, we take care of tempo to quantize correctly.
+        # We will step from beat to beat, inserting tempo events such that the qpm is
+        # correct, yielding exactly "one beat worth of ticks per beat".
         for prev_beat, next_beat in zip(beats, beats[1:]):
-            # Calculate the inter-beat interval in seconds
-            ibi = next_beat - prev_beat
             # Calculate the tempo in beats per minute
-            # bpm = 60 / ibi
+            # In a compound meters, one inter-beat-interval does not correspond to one
+            # quarter note. Therefore we have to rescale according to the time signature
+            current_time_signature = midi.time_signature_changes[0]
+            for time_signature in midi.time_signature_changes:
+                if time_signature.time <= prev_beat:
+                    current_time_signature = time_signature
+                else:
+                    break
             # Calculate seconds per tick
-            tick_scale = ibi / midi.resolution
+            # Naive:
+            # bpm = 60 / inter_beat_interval
+            # qpm = bpm / bpm_per_qpm
+            # tick_scale = 60 / (qpm * midi.resolution)
+            # Simplified:
+            bpm_per_qpm = pretty_midi.utilities.qpm_to_bpm(1.0,
+                                                           current_time_signature.numerator,
+                                                           current_time_signature.denominator)
+
+            tick_scale = (next_beat - prev_beat) * bpm_per_qpm / midi.resolution
+
             # Insert the tempo change into the PrettyMIDI object
             insert_ticks = midi.time_to_tick(prev_beat)
-            # print(midi._PrettyMIDI__tick_to_time)
             midi._tick_scales.append((insert_ticks, tick_scale))
             midi._update_tick_to_time(insert_ticks + 1)
-        # for b in beats:
-        #     print(round(1000*b))
-        import matplotlib.pyplot as plt
-        midi_gt = pretty_midi.PrettyMIDI(midi_path)
-        midi.time_signature_changes = midi_gt.time_signature_changes
-        # midi_gt._update_tick_to_time(insert_ticks + 1)
-        # print(midi.time_signature_changes)
-        # print(midi_gt.time_signature_changes)
-        # # Plot the tick scales and tick to time mappings
+
         midi.write(save_path)
         return save_path
 
@@ -172,21 +179,23 @@ def eval(args):
         print(f"Evaluating {idx}")
         # Load inputs
         row = dataset._sample_row(idx)
-        note_sequence, annotations = dataset._load_data(row)
-        midi_pred = predict(note_sequence, row["midi_perfm"])
         # Load ground truth
-        # annotations["onsets_musical"] = np.round(annotations["onsets_musical"] * N_per_beat) / N_per_beat
-        # annotations["note_value"] = np.round(annotations["note_value"] * N_per_beat) / N_per_beat
-        # annotations["note_value"][annotations["note_value"] == 0] = 1 / N_per_beat
-        # midi_gt = quantize(note_sequence, annotations, "test_gt.mid", pretty_midi.PrettyMIDI(row["midi_perfm"]))
-        midi_gt = row["midi_perfm"]
+        note_sequence, annotations = dataset._load_data(row)
+        midi_pred = predict(note_sequence)
+        annotations["onsets_musical"] = np.round(annotations['onsets_musical'] * N_per_beat) / N_per_beat
+        annotations["onsets_musical"][annotations["onsets_musical"] == N_per_beat] = 0 # reset one beat onset to 0
+        # note values
+        annotations['note_value'] = np.round(annotations['note_value'] * N_per_beat) / N_per_beat
+        annotations['note_value'][annotations['note_value'] == 0] = 1 / N_per_beat
+
+        midi_gt = quantize(note_sequence, annotations, "test_gt.mid")
+        # midi_gt = row["midi_perfm"]
         # Evaluate
         result = mv2h(midi_pred, midi_gt)
         for line in result.splitlines():
             key, value = line.split(": ")
             metrics[key].append(float(value))
         print(result)
-        # break
 
     for key, value in metrics.items():
         print(key, np.mean(value), "+/-", np.std(value))
