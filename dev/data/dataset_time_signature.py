@@ -36,4 +36,3 @@ class TimeSignatureDataset(BaseDataset):
             ts_denominators = np.concatenate([ts_denominators, np.zeros(max_length - length)])
 
         return note_sequence, ts_numerators, ts_denominators, length
-

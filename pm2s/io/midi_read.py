@@ -12,7 +12,9 @@ def read_note_sequence(midi_file):
 
     Returns
     -------
-    note_seq: (numpy.array) in the shape of (n, 4), where n is the number of notes, and 4 is the number of features including (pitch, onset, offset, velocity). The note sequence is sorted by onset time.
+    note_seq: (numpy.array) in the shape of (n, 4), where n is the number of notes,
+        and 4 is the number of features including (pitch, onset, length, velocity).
+        The note sequence is sorted by onset time.
     """
     midi_data = pretty_midi.PrettyMIDI(midi_file)
     notes = []

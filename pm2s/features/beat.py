@@ -12,7 +12,7 @@ class RNNJointBeatProcessor(MIDIProcessor):
 
     def __init__(self, model_state_dict_path='_model_state_dicts/beat/RNNJointBeatModel.pth', **kwargs):
         super().__init__(model_state_dict_path, **kwargs)
-                         
+
     def load(self, state_dict_path):
         if state_dict_path:
             self._model = RNNJointBeatModel()
@@ -21,20 +21,23 @@ class RNNJointBeatProcessor(MIDIProcessor):
             self._model = RNNJointBeatModel()
 
     def process(self, midi_file, **kwargs):
-        # Read MIDI file into note sequence
-        note_seq = read_note_sequence(midi_file)
+        if isinstance(midi_file, str):
+            # Read MIDI file into note sequence
+            note_seq = read_note_sequence(midi_file)
+        else:
+            note_seq = midi_file
         x = torch.tensor(note_seq).unsqueeze(0)
 
         # Forward pass
         beat_probs, downbeat_probs, _ = self._model(x)
 
         # Post-processing
-        beat_probs = beat_probs.squeeze(0).detach().numpy()
-        downbeat_probs = downbeat_probs.squeeze(0).detach().numpy()
+        beat_probs = beat_probs.squeeze(0).detach().cpu().numpy()
+        downbeat_probs = downbeat_probs.squeeze(0).detach().cpu().numpy()
         onsets = note_seq[:, 1]
 
         beats = self.pps(beat_probs, downbeat_probs, onsets)
-            
+
         return beats
 
     @staticmethod
@@ -66,9 +69,9 @@ class RNNJointBeatProcessor(MIDIProcessor):
         # initialize beat and downbeat thresholds
         thresh_beats = np.ones(N_notes) * prob_thresh
         thresh_downbeats = np.ones(N_notes) * prob_thresh
-        
+
         l_b, r_b, l_db, r_db = 0, 0, 0, 0  # sliding window indices
-        
+
         for i, onset in enumerate(onsets):
             # udpate pointers
             while onsets[l_b] < onset - wlen_beats / 2:
@@ -156,7 +159,7 @@ class RNNJointBeatProcessor(MIDIProcessor):
                 ibi = (beats[i] - beats[i-1]) / (x + 1)
                 objs = []
                 for x_prev in range(4):
-                    o1 = np.abs(np.log(ibi / (beats_dp[x_prev][-1] - beats_dp[x_prev][-2])))
+                    o1 = np.abs(np.log(ibi / (beats_dp[x_prev][-1] - beats_dp[x_prev][-2] + 1e-9)))
                     o = obj_dp[x_prev] + o1 + penalty * x
                     objs.append(o)
 

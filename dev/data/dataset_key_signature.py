@@ -17,11 +17,10 @@ class KeySignatureDataset(BaseDataset):
 
         # Get model output data
         key_signatures = annotations['key_signatures']
-
         key_numbers = np.zeros(len(note_sequence)).astype(float)
 
         for i in range(len(note_sequence)):
-            onset = note_sequence[i,1]
+            onset = note_sequence[i, 1]
             for ks in key_signatures:
                 if ks[0] > onset + tolerance:
                     break

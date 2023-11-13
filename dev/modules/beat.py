@@ -35,13 +35,12 @@ class BeatModule(pl.LightningModule):
         y_b_hat, y_db_hat, y_ibi_hat = self(x)
 
         # Mask out the padding part
-        mask = torch.ones(y_b_hat.shape).to(y_b_hat.device)
+        mask = torch.ones(y_b_hat.shape, dtype=torch.long).to(y_b_hat.device)
         for i in range(y_b_hat.shape[0]):
             mask[i, length[i]:] = 0
         y_b_hat = y_b_hat * mask
         y_db_hat = y_db_hat * mask
         y_ibi_hat = y_ibi_hat * mask.unsqueeze(1)
-
         # Loss
         loss_b = F.binary_cross_entropy(y_b_hat, y_b)
         loss_db = F.binary_cross_entropy(y_db_hat, y_db)
@@ -67,7 +66,6 @@ class BeatModule(pl.LightningModule):
         y_db = y_db.float()
         y_ibi = y_ibi.long()
         length = length.long()
-
         # Forward pass
         y_b_hat, y_db_hat, y_ibi_hat = self(x)
 
@@ -92,7 +90,7 @@ class BeatModule(pl.LightningModule):
             y_b_hat_i = torch.round(y_b_hat[i, :length[i]])
             y_db_hat_i = torch.round(y_db_hat[i, :length[i]])
             y_ibi_hat_i = y_ibi_hat[i, :, :length[i]].topk(1, dim=0)[1][0]
-            
+
             y_b_i = y_b[i, :length[i]]
             y_db_i = y_db[i, :length[i]]
             y_ibi_i = y_ibi[i, :length[i]]
@@ -104,7 +102,6 @@ class BeatModule(pl.LightningModule):
             # get accuracy
             acc_b, prec_b, rec_b, f_b = f_measure_framewise(y_b_i, y_b_hat_i)
             acc_db, prec_db, rec_db, f_db = f_measure_framewise(y_db_i, y_db_hat_i)
-            
             accs_b += acc_b
             precs_b += prec_b
             recs_b += rec_b

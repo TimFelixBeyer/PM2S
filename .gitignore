@@ -5,3 +5,6 @@ _model_state_dicts
 .pkl
 .mid
 *annotations.txt
+features/
+mlruns
+pm2s/data

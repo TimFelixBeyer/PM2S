@@ -54,7 +54,7 @@ class QuantisationModule(pl.LightningModule):
         self.log_dict(logs, prog_bar=True)
 
         return {'loss': loss, 'logs': logs}
-        
+
 
     def validation_step(self, batch, batch_size):
         # Data
@@ -157,9 +157,8 @@ class QuantisationModule(pl.LightningModule):
 
         return {'val_loss': loss, 'logs': logs}
 
-            
 
 
 
 
-        
+

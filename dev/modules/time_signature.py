@@ -74,8 +74,12 @@ class TimeSignatureModule(pl.LightningModule):
         # Loss
         loss_tn = nn.NLLLoss(ignore_index=0)(y_tn_hat, y_tn)
         loss_td = nn.NLLLoss(ignore_index=0)(y_td_hat, y_td)
+        # Prevent NaNs
+        if (y_tn == 0).all():
+            loss_tn = 0
+        if (y_td == 0).all():
+            loss_td = 0
         loss = loss_tn + loss_td
-
         # Metrics
         precs_macro_tn, recs_macro_tn, fs_macro_tn = 0, 0, 0
         precs_weighted_tn, recs_weighted_tn, fs_weighted_tn = 0, 0, 0
@@ -105,7 +109,7 @@ class TimeSignatureModule(pl.LightningModule):
                 prec_macro_td, rec_macro_td, f_macro_td,
                 prec_weighted_td, rec_weighted_td, f_weighted_td
             ) = classification_report_framewise(y_td_i, y_td_hat_i)
-            
+
             precs_macro_tn += prec_macro_tn
             recs_macro_tn += rec_macro_tn
             fs_macro_tn += f_macro_tn
@@ -146,8 +150,6 @@ class TimeSignatureModule(pl.LightningModule):
         self.log_dict(logs, prog_bar=True)
 
         return {'loss': loss, 'logs': logs}
-
-
 
 
 

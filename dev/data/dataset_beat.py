@@ -38,12 +38,12 @@ class BeatDataset(BaseDataset):
                 # reset ibi to 0 if it's too long, index 0 will be ignored during training
                 ibi = np.array(0)
             time2ibi[l:r+1] = np.round(ibi / resolution)
-        
+
         for downbeat in downbeats:
             l = np.round((downbeat - tolerance) / resolution).astype(int)
             r = np.round((downbeat + tolerance) / resolution).astype(int)
             time2downbeat[l:r+1] = 1.0
-        
+
         # get beat probabilities at note onsets
         beat_probs = np.zeros(len(note_sequence), dtype=np.float32)
         downbeat_probs = np.zeros(len(note_sequence), dtype=np.float32)
@@ -53,7 +53,7 @@ class BeatDataset(BaseDataset):
             beat_probs[i] = time2beat[np.round(onset / resolution).astype(int)]
             downbeat_probs[i] = time2downbeat[np.round(onset / resolution).astype(int)]
             ibis[i] = time2ibi[np.round(onset / resolution).astype(int)]
-        
+
         # pad if length is shorter than max_length
         length = len(note_sequence)
         if len(note_sequence) < max_length:
@@ -61,11 +61,11 @@ class BeatDataset(BaseDataset):
             beat_probs = np.concatenate([beat_probs, np.zeros(max_length - len(beat_probs))])
             downbeat_probs = np.concatenate([downbeat_probs, np.zeros(max_length - len(downbeat_probs))])
             ibis = np.concatenate([ibis, np.zeros(max_length - len(ibis))])
-            
+
         return (
-            note_sequence, 
-            beat_probs, 
-            downbeat_probs, 
-            ibis, 
+            note_sequence,
+            beat_probs,
+            downbeat_probs,
+            ibis,
             length,
         )

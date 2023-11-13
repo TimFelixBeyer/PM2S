@@ -78,8 +78,8 @@ class LinearOutput(nn.Module):
             self.activation = nn.Sigmoid()
         elif activation_type == 'softmax':
             self.activation = nn.LogSoftmax(dim=2)
-        elif activation_type == 'softplus':
-            self.activation = nn.Softplus()
+        else:
+            raise ValueError('activation_type must be either sigmoid or softmax')
 
     def forward(self, x):
         # x: (batch_size, sequence_length, in_features)

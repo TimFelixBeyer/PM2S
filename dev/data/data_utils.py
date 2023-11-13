@@ -9,14 +9,14 @@ from functools import reduce, cmp_to_key
 from pathlib import Path
 
 from pm2s.constants import (
-    resolution, 
-    tolerance, 
-    keySharps2Number, 
+    resolution,
+    tolerance,
+    keySharps2Number,
     keyVocabSize,
-    tsDeno2Index, 
+    tsDeno2Index,
     # max_length_pr
 )
-    
+
 def get_note_sequence_from_midi(midi_file):
     """
     Get note sequence from midi file.
@@ -33,7 +33,7 @@ def get_note_sequence_from_midi(midi_file):
 def get_annotations_from_annot_file(annot_file):
     """
     Get annotations from annotation file in ASAP dataset.
-    annotatioins in a dict of {
+    annotations in a dict of {
         beats: list of beat times,
         downbeats: list of downbeat times,
         time_signatures: list of (time, numerator, denominator) tuples,
@@ -137,11 +137,11 @@ def get_note_sequence_and_annotations_from_midi(midi_file):
         return (midi_data.time_to_tick(end) - midi_data.time_to_tick(start)) / base
 
     # get onsets_musical and note_values
-    # filter out small negative values (they are usually caused by errors in time_to_tick convertion)
+    # filter out small negative values (they are usually caused by errors in time_to_tick conversion)
     onsets_musical = [min(1, max(0, time2pos(note.start))) for note in note_sequence]  # in range 0-1
     note_values = [max(0, times2note_value(note.start, note.end)) for note in note_sequence]
 
-    # conver to Tensor
+    # convert to Tensor
     note_sequence = np.array([[note.pitch, note.start, note.end-note.start, note.velocity] \
                                     for note in note_sequence])
     # save as annotation dict

@@ -20,6 +20,7 @@ class RNNHandPartModel(nn.Module):
     def forward(self, x):
         # x: (batch_size, seq_len, len(features)==4)
         x = encode_note_sequence(x)
+        x = x.to(next(self.parameters()).device)
 
         x = self.convs(x) # (batch_size, seq_len, hidden_size)
         x = self.gru(x) # (batch_size, seq_len, hidden_size)

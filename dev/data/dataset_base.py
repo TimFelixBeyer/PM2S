@@ -57,10 +57,12 @@ class BaseDataset(torch.utils.data.Dataset):
             piece_id = random.choice(list(self.piece2row.keys()))   # random sampling by piece
             row_id = random.choice(self.piece2row[piece_id])
         elif self.split == 'valid':
-            piece_id = self.pieces[idx // batch_size]    # by istinct pieces in validation set
+            piece_id = self.pieces[idx // batch_size]    # by distinct pieces in validation set
             row_id = self.piece2row[piece_id][idx % batch_size % len(self.piece2row[piece_id])]
         elif self.split == 'test':
             row_id = idx
+        else:
+            raise NotImplementedError
         row = self.metadata.iloc[row_id]
 
         return row

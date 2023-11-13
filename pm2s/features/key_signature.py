@@ -19,8 +19,11 @@ class RNNKeySignatureProcessor(MIDIProcessor):
             self._model = RNNKeySignatureModel()
 
     def process(self, midi_file, **kwargs):
-        # Read MIDI file into note sequence
-        note_seq = read_note_sequence(midi_file)
+        if isinstance(midi_file, str):
+            # Read MIDI file into note sequence
+            note_seq = read_note_sequence(midi_file)
+        else:
+            note_seq = midi_file
         x = torch.tensor(note_seq).unsqueeze(0)
 
         # Forward pass
@@ -44,4 +47,4 @@ class RNNKeySignatureProcessor(MIDIProcessor):
                 ks_changes.append((onset_cur, ks_cur))
                 ks_prev = ks_cur
         return ks_changes
-            
+

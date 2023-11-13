@@ -10,20 +10,29 @@ from pm2s.constants import N_per_beat, tolerance
 
 class RNNJointQuantisationProcessor(MIDIProcessor):
 
-    def __init__(self, model_state_dict_path='_model_state_dicts/quantisation/RNNJointQuantisationModel.pth', **kwargs):
+    def __init__(self,
+                 model_state_dict_path='_model_state_dicts/quantisation/RNNJointQuantisationModel.pth',
+                 beat_model_state_dict_path='_model_state_dicts/beat/RNNJointBeatModel.pth',
+                 **kwargs):
+        self.beat_model_state_dict_path = beat_model_state_dict_path
         super().__init__(model_state_dict_path, **kwargs)
 
     def load(self, state_dict_path):
         if state_dict_path:
-            self._model = RNNJointQuantisationModel()
+            self._model = RNNJointQuantisationModel(self.beat_model_state_dict_path)
             self._model.load_state_dict(torch.load(state_dict_path))
+            self._model.beat_model.load_state_dict(torch.load(self.beat_model_state_dict_path))
         else:
             self._model = RNNJointQuantisationModel()
 
     def process(self, midi_file, **kwargs):
-        # Read MIDI file into note sequence
-        note_seq = read_note_sequence(midi_file)
+        if isinstance(midi_file, str):
+            # Read MIDI file into note sequence
+            note_seq = read_note_sequence(midi_file)
+        else:
+            note_seq = midi_file
         x = torch.tensor(note_seq).unsqueeze(0)
+        x = x.to(next(self._model.parameters()).device)
 
         # Forward pass
         beat_probs, downbeat_probs, onset_position_probs, note_value_probs = self._model(x)
@@ -32,11 +41,11 @@ class RNNJointQuantisationProcessor(MIDIProcessor):
         onset_positions_idx = onset_position_probs[0].topk(1, dim=0)[1].squeeze(0) # (n_notes,)
         note_values_idx = note_value_probs[0].topk(1, dim=0)[1].squeeze(0) # (n_notes,)
 
-        onset_positions_idx = onset_positions_idx.detach().numpy()
-        note_values_idx = note_values_idx.detach().numpy()
+        onset_positions_idx = onset_positions_idx.detach().cpu().numpy()
+        note_values_idx = note_values_idx.detach().cpu().numpy()
 
-        beat_probs = beat_probs.squeeze(0).detach().numpy()
-        downbeat_probs = downbeat_probs.squeeze(0).detach().numpy()
+        beat_probs = beat_probs.squeeze(0).detach().cpu().numpy()
+        downbeat_probs = downbeat_probs.squeeze(0).detach().cpu().numpy()
         onsets = note_seq[:, 1]
 
         beats, onset_positions, note_values = self.pps(onset_positions_idx, note_values_idx, beat_probs, downbeat_probs, onsets)

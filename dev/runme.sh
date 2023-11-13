@@ -4,16 +4,15 @@
 # Workspace, dataset, and evaluation tools
 # ========================================================
 # Modify the following paths to your own workspace
-WORKSPACE="/import/c4dm-05/ll307/workspace/PM2S-draft"
-
+WORKSPACE="/rhome/beyer/reproduction/PM2S"
 # Modify the following paths to your own dataset directory
-ASAP="/import/c4dm-05/ll307/datasets/asap-dataset-master"
-A_MAPS="/import/c4dm-05/ll307/datasets/A-MAPS_1.1"
-CPM="/import/c4dm-05/ll307/datasets/CPM"
-ACPAS="/import/c4dm-05/ll307/datasets/ACPAS-dataset"
+ASAP="$WORKSPACE/pm2s/data/asap-dataset-master"
+A_MAPS="$WORKSPACE/pm2s/data/A-MAPS_1"
+CPM="$WORKSPACE/pm2s/data/ClassicalPianoMIDI-dataset-main"
+ACPAS="$WORKSPACE/pm2s/data/ACPAS-dataset"
 
 # # ========================================================
-# # Feature preparation 
+# # Feature preparation
 # # ========================================================
 # python3 feature_preparation.py \
 #     --dataset_folder $ASAP $A_MAPS $CPM $ACPAS \
@@ -25,13 +24,13 @@ ACPAS="/import/c4dm-05/ll307/datasets/ACPAS-dataset"
 # # Model training
 # # ========================================================
 # # feature can be 'beat', 'quantisation', 'time_signature', 'key_signature', 'hand_part'
-# python3 train.py \
-#     --workspace $WORKSPACE \
-#     --ASAP $ASAP \
-#     --A_MAPS $A_MAPS \
-#     --CPM $CPM \
-#     --feature 'time_signature' \
-#     # --full_train
+python3 train.py \
+    --workspace $WORKSPACE \
+    --ASAP $ASAP \
+    --A_MAPS $A_MAPS \
+    --CPM $CPM \
+    --feature 'beat' \
+    # --full_train
 
 
 # # ========================================================

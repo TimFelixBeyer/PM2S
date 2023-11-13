@@ -19,26 +19,29 @@ class RNNTimeSignatureProcessor(MIDIProcessor):
             self._model = RNNTimeSignatureModel()
 
     def process(self, midi_file, **kwargs):
-        # Read MIDI file into note sequence
-        note_seq = read_note_sequence(midi_file)
+        if isinstance(midi_file, str):
+            # Read MIDI file into note sequence
+            note_seq = read_note_sequence(midi_file)
+        else:
+            note_seq = midi_file
         x = torch.tensor(note_seq).unsqueeze(0)
 
         # Forward pass
-        td_probs, tn_probs = self._model(x)
+        tn_probs, td_probs = self._model(x)
 
         # Post-processing
-        td_idx = td_probs[0].topk(1, dim=0)[1].squeeze(0).cpu().detach().numpy() # (seq_len,)
         tn_idx = tn_probs[0].topk(1, dim=0)[1].squeeze(0).cpu().detach().numpy() # (seq_len,)
+        td_idx = td_probs[0].topk(1, dim=0)[1].squeeze(0).cpu().detach().numpy() # (seq_len,)
 
         onsets = note_seq[:, 1]
-        time_signature_changes = self.pps(td_idx, tn_idx, onsets)
+        time_signature_changes = self.pps(tn_idx, td_idx, onsets)
 
         return time_signature_changes
 
-    def pps(self, td_idx, tn_idx, onsets):
+    def pps(self, tn_idx, td_idx, onsets):
         ts_prev = '0/0'
         ts_changes = []
-        for i in range(len(td_idx)):
+        for i in range(len(tn_idx)):
             ts_cur = '{:d}/{:d}'.format(tsIndex2Nume[tn_idx[i]], tsIndex2Deno[td_idx[i]])
             if i == 0 or ts_cur != ts_prev:
                 onset_cur = onsets[i]

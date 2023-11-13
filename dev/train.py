@@ -12,6 +12,7 @@ from modules.hand_part import HandPartModule
 from modules.key_signature import KeySignatureModule
 from modules.time_signature import TimeSignatureModule
 from configs import gpus
+import mlflow
 
 
 ## -------------------------
@@ -55,12 +56,12 @@ def train(args):
         logger=logger,
         log_every_n_steps=50,
         reload_dataloaders_every_n_epochs=True,
-        accelerator="gpu",
-        devices=gpus,
+        accelerator="auto",
     )
 
     # Train
     trainer.fit(model, data_module)
+    trainer.validate(model, dataloaders=data_module.val_dataloader())
 
 
 if __name__ == '__main__':
